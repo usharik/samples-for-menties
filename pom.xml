@@ -18,6 +18,7 @@
     <modules>
         <module>spring-mvc-base-example</module>
         <module>spring-mvc-with-jquery</module>
+        <module>spring-import-from-excel</module>
     </modules>
 
 </project>
