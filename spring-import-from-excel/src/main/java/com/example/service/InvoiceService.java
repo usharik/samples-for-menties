@@ -2,19 +2,15 @@ package com.example.service;
 
 import com.example.persist.Invoice;
 import com.example.persist.InvoiceRepository;
-import org.apache.poi.ss.usermodel.CellType;
-import org.apache.poi.ss.usermodel.FormulaEvaluator;
-import org.apache.poi.xssf.usermodel.XSSFCell;
-import org.apache.poi.xssf.usermodel.XSSFRow;
-import org.apache.poi.xssf.usermodel.XSSFSheet;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import com.example.service.excel.ColumnMapper;
+import com.example.service.excel.ExcelImportFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
-import java.time.ZoneId;
+import java.time.LocalDate;
 import java.util.*;
 
 @Service
@@ -22,9 +18,21 @@ public class InvoiceService {
 
     private final InvoiceRepository invoiceRepository;
 
+    private final ExcelImportFactory excelImportFactory;
+
+    private final ColumnMapper columnMapper = new ColumnMapper.ColumnMapperBuilder()
+            .withStringColumn("invoiceNumber", 0, true)
+            .withStringColumn("supplier", 1, true)
+            .withDateColumn("date", 2, true)
+            .withStringColumn("description", 3, false)
+            .withIntegerColumn("qty", 4, true)
+            .withBigDecimalColumn("total", 5, true)
+            .build();
+
     @Autowired
-    public InvoiceService(InvoiceRepository invoiceRepository) {
+    public InvoiceService(InvoiceRepository invoiceRepository, ExcelImportFactory excelImportFactory) {
         this.invoiceRepository = invoiceRepository;
+        this.excelImportFactory = excelImportFactory;
     }
 
     public List<Invoice> findAll() {
@@ -32,74 +40,18 @@ public class InvoiceService {
     }
 
     public void importFromExcel(InputStream is) throws IOException {
-        XSSFWorkbook workBook = new XSSFWorkbook(is);
-        FormulaEvaluator evaluator = workBook.getCreationHelper().createFormulaEvaluator();
-
-        XSSFSheet sheet = workBook.getSheetAt(0);
         List<Invoice> invoicesList = new ArrayList<>();
 
-        for (XSSFRow row : new ExcelRowIterable(sheet, 1)) {
+        for (Map<String, Object> row: excelImportFactory.createExcelRowIterable(is, 0, 1, columnMapper)) {
             Invoice invoice = new Invoice();
-
-            invoice.setInvoiceNumber(Optional.ofNullable(row.getCell(0))
-                    .map(XSSFCell::getStringCellValue)
-                    .orElseThrow(() -> new IllegalArgumentException("No invoice number at row " + row.getRowNum())));
-
-            invoice.setSupplier(Optional.ofNullable(row.getCell(1))
-                    .map(XSSFCell::getStringCellValue)
-                    .orElseThrow(() -> new IllegalArgumentException("No supplier at row " + row.getRowNum())));
-
-            invoice.setDate(Optional.ofNullable(row.getCell(2))
-                    .map(XSSFCell::getDateCellValue)
-                    .map(date -> date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate())
-                    .orElseThrow(() -> new IllegalArgumentException("No date at row " + row.getRowNum())));
-
-            invoice.setDescription(Optional.ofNullable(row.getCell(3))
-                    .map(XSSFCell::getStringCellValue)
-                    .orElse(null));
-
-            invoice.setQty(Optional.ofNullable(row.getCell(4))
-                    .map(XSSFCell::getNumericCellValue)
-                    .map(val -> (int) Math.ceil(val))
-                    .orElseThrow(() -> new IllegalArgumentException("No qty at row " + row.getRowNum())));
-
-            invoice.setTotal(Optional.ofNullable(row.getCell(5))
-                    .map(XSSFCell::getNumericCellValue)
-                    .map(BigDecimal::new)
-                    .orElse(null));
+            invoice.setInvoiceNumber((String) row.get("invoiceNumber"));
+            invoice.setSupplier((String) row.get("supplier"));
+            invoice.setDate((LocalDate) row.get("date"));
+            invoice.setDescription((String) row.get("description"));
+            invoice.setQty((Integer) row.get("qty"));
+            invoice.setTotal((BigDecimal) row.get("total"));
             invoicesList.add(invoice);
         }
         invoiceRepository.saveAllAndFlush(invoicesList);
-    }
-
-    private static class ExcelRowIterable implements Iterable<XSSFRow> {
-
-        private int rowIndex;
-
-        private final XSSFSheet sheet;
-
-        private ExcelRowIterable(XSSFSheet sheet, int rowToStart) {
-            this.sheet = sheet;
-            this.rowIndex = rowToStart;
-        }
-
-        @Override
-        public Iterator<XSSFRow> iterator() {
-
-            return new Iterator<>() {
-                @Override
-                public boolean hasNext() {
-                    return Optional.ofNullable(sheet.getRow(rowIndex))
-                            .map(row -> row.getCell(0))
-                            .filter(cell -> cell.getCellType() != CellType.BLANK)
-                            .isPresent();
-                }
-
-                @Override
-                public XSSFRow next() {
-                    return sheet.getRow(rowIndex++);
-                }
-            };
-        }
     }
 }
