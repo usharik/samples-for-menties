@@ -15,6 +15,10 @@ public class ColumnMapper {
     private ColumnMapper() {
     }
 
+    List<ColumnInfo> getColumnInfos() {
+        return columnInfos;
+    }
+
     public Map<String, Object> convert(XSSFRow row) {
         Map<String, Object> result = new HashMap<>();
         for (ColumnInfo columnInfo : columnInfos) {
@@ -63,7 +67,7 @@ public class ColumnMapper {
         }
     }
 
-    private static class ColumnInfo {
+    static class ColumnInfo {
 
         private final int columnIndex;
 
@@ -81,6 +85,14 @@ public class ColumnMapper {
 
         public String getColumnName() {
             return columnName;
+        }
+
+        public int getColumnIndex() {
+            return columnIndex;
+        }
+
+        public boolean isObligatory() {
+            return isObligatory;
         }
 
         public Object convert(XSSFRow row) {
